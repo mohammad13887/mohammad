@@ -1,6 +1,10 @@
 name: CI
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   build:
@@ -22,6 +26,4 @@ jobs:
     - run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
     - run: Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "P@ssw0rd!" -Force)
     - name: Create Tunnel
-      run: |
-        .\ngrok\ngrok.exe tcp 3389 &
-        Start-Process -FilePath 'C:\Windows\System32\cmd.exe' -ArgumentList '/c .\ngrok\ngrok.exe tcp 3389' -NoNewWindow
+      run: .\ngrok\ngrok.exe tcp 3389
