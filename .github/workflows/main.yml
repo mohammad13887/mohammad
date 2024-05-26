@@ -1,27 +1,45 @@
-name: CI
-
- 
-on: [push, workflow_dispatch]
- 
-jobs:
-  build:
- 
-    runs-on: windows-latest
- 
+stages:
+- stage: setup
+  jobs:
+  - job: windows_setup
+    pool:
+      vmImage: 'windows-2022'  # Use the appropriate Windows version
+    timeoutInMinutes: 360
     steps:
-    - name: Download
-      run: Invoke-WebRequest https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-windows-amd64.zip -OutFile ngrok.zip
-    - name: Extract
-      run: Expand-Archive ngrok.zip
-    - name: Auth
-      run: .\ngrok\ngrok.exe authtoken $Env:NGROK_AUTH_TOKEN
-      env:
-        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
-    - name: Enable TS
-      run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
-    - run: Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-    - run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
-    - run: Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "P@ssw0rd!" -Force)
-    - name: Create Tunnel
-      run: .\ngrok\ngrok.exe tcp 3389
+    - powershell: |
+        # Download and Setup ngrok
+        Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
+        Expand-Archive ngrok.zip
+        .\ngrok\ngrok.exe authtoken $Env:NGROK_AUTH_TOKEN
+      displayName: 'Download and Setup ngrok'
 
+    - powershell: |
+        # Configure Remote Desktop
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+      displayName: 'Configure Remote Desktop'
+
+    - powershell: |
+        # Create User runneradmin
+        echo "Checking if user 'runneradmin' exists before creating..."
+        $existingUser = Get-LocalUser -Name 'runneradmin' -ErrorAction SilentlyContinue
+        if ($existingUser) {
+            echo "User 'runneradmin' already exists."
+        } else {
+            echo "User 'runneradmin' does not exist or an error occurred."
+            $userCreationOutput = New-LocalUser -Name 'runneradmin' -Password (ConvertTo-SecureString $env:ADMIN_PASSWORD -AsPlainText -Force) -PasswordNeverExpires:$true -AccountNeverExpires:$true -ErrorAction Stop
+            if ($userCreationOutput) {
+                echo "User 'runneradmin' created successfully."
+                Add-LocalGroupMember -Group 'Administrators' -Member 'runneradmin' -ErrorAction Stop
+            } else {
+                echo "Error creating user 'runneradmin': $userCreationOutput"
+                exit 1
+            }
+        }
+      displayName: 'Create User runneradmin'
+
+    - powershell: |
+        # Run ngrok for RDP
+        .\ngrok\ngrok.exe tcp 3389
+      displayName: 'Run ngrok for RDP'
